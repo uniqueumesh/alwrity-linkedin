@@ -13,6 +13,44 @@ from exa_py import Exa
 import clipboard
 
 
+GEMINI_MODEL_FALLBACK = (
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+)
+
+
+def _is_retryable_gemini_error(err: Exception) -> bool:
+    msg = str(err).lower()
+    return any(
+        token in msg
+        for token in (
+            "429",
+            "quota",
+            "rate limit",
+            "rate-limit",
+            "resource_exhausted",
+            "too many requests",
+        )
+    )
+
+
+def _on_gemini_retry_exhausted(retry_state):
+    last_exc = None
+    try:
+        last_exc = retry_state.outcome.exception()
+    except Exception:
+        last_exc = None
+
+    details = f"{last_exc}" if last_exc else "Unknown error."
+    st.error(
+        "❌ Unable to generate a LinkedIn post right now. "
+        "All configured Gemini models were exhausted due to quota/rate limits.\n\n"
+        f"Details: {details}"
+    )
+    return None
+
+
 def main():
     # Set page configuration
     st.set_page_config(
@@ -178,7 +216,12 @@ def metaphor_search_articles(query):
         return None
 
 
-@retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(6))
+@retry(
+    wait=wait_random_exponential(min=1, max=60),
+    stop=stop_after_attempt(6),
+    reraise=False,
+    retry_error_callback=_on_gemini_retry_exhausted,
+)
 def generate_text_with_exception_handling(prompt):
     """
     Generates text using the Gemini model with exception handling.
@@ -191,46 +234,49 @@ def generate_text_with_exception_handling(prompt):
         str: The generated text.
     """
 
-    try:
-        genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
+    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-        generation_config = {
-            "temperature": 1,
-            "top_p": 0.95,
-            "top_k": 0,
-            "max_output_tokens": 8192,
-        }
+    generation_config = {
+        "temperature": 1,
+        "top_p": 0.95,
+        "top_k": 0,
+        "max_output_tokens": 8192,
+    }
 
-        safety_settings = [
-            {
-                "category": "HARM_CATEGORY_HARASSMENT",
-                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-            },
-            {
-                "category": "HARM_CATEGORY_HATE_SPEECH",
-                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-            },
-            {
-                "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-            },
-            {
-                "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-            },
-        ]
+    safety_settings = [
+        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+        {
+            "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+            "threshold": "BLOCK_MEDIUM_AND_ABOVE",
+        },
+        {
+            "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+            "threshold": "BLOCK_MEDIUM_AND_ABOVE",
+        },
+    ]
 
-        model = genai.GenerativeModel(model_name="gemini-2.5-flash",
-                                      generation_config=generation_config,
-                                      safety_settings=safety_settings)
+    last_retryable_error = None
+    for model_name in GEMINI_MODEL_FALLBACK:
+        try:
+            model = genai.GenerativeModel(
+                model_name=model_name,
+                generation_config=generation_config,
+                safety_settings=safety_settings,
+            )
+            convo = model.start_chat(history=[])
+            convo.send_message(prompt)
+            return convo.last.text
+        except Exception as e:
+            if _is_retryable_gemini_error(e):
+                last_retryable_error = e
+                continue
+            raise
 
-        convo = model.start_chat(history=[])
-        convo.send_message(prompt)
-        return convo.last.text
-
-    except Exception as e:
-        st.exception(f"An unexpected error occurred: {e}")
-        return None
+    # All configured models exhausted due to quota/rate-limit type errors.
+    if last_retryable_error is not None:
+        raise last_retryable_error
+    raise RuntimeError("All configured Gemini models failed.")
 
 
 if __name__ == "__main__":
