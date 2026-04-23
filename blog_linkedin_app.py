@@ -148,15 +148,19 @@ def main():
                     input_blog_keywords, input_linkedin_type, 
                     input_linkedin_length, input_linkedin_language)
 
-            # Post generation success message
-            st.success('🎉 **Your LinkedIn post is ready!**')
-            st.subheader('📄 **LinkedIn Post Preview**')
-            st.write(st.session_state.linkedin_post)
+            # Check if post generation succeeded
+            if st.session_state.linkedin_post is not None:
+                # Post generation success message
+                st.success('🎉 **Your LinkedIn post is ready!**')
+                st.subheader('📄 **LinkedIn Post Preview**')
+                st.write(st.session_state.linkedin_post)
 
-            # Copy to Clipboard button with success feedback
-            if st.button('📋 Copy to Clipboard'):
-                clipboard.copy(st.session_state.linkedin_post)
-                st.success("✅ LinkedIn post copied to clipboard!")
+                # Copy to Clipboard button with success feedback
+                if st.button('📋 Copy to Clipboard'):
+                    clipboard.copy(st.session_state.linkedin_post)
+                    st.success("✅ LinkedIn post copied to clipboard!")
+            else:
+                st.error('❌ **Failed to generate LinkedIn post. Please check your inputs or try again later.**')
 
 
 def generate_linkedin_post(input_blog_keywords, input_linkedin_type, input_linkedin_length, input_linkedin_language):
