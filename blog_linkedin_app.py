@@ -202,17 +202,22 @@ Generate a LinkedIn post that is professional, engaging, and optimized for both 
 
 # Metaphor search function
 def metaphor_search_articles(query):
-    METAPHOR_API_KEY = os.getenv('METAPHOR_API_KEY')
-    if not METAPHOR_API_KEY:
-        raise ValueError("METAPHOR_API_KEY environment variable not set!")
+    EXA_API_KEY = os.getenv('EXA_API_KEY')
+    if not EXA_API_KEY:
+        raise ValueError("EXA_API_KEY environment variable not set!")
 
-    metaphor = Exa(METAPHOR_API_KEY)
+    exa = Exa(EXA_API_KEY)
 
     try:
-        search_response = metaphor.search_and_contents(query, use_autoprompt=True, num_results=5)
+        search_response = exa.search_and_contents(
+            query,
+            type="auto",
+            num_results=5,
+            highlights={"max_characters": 1000},
+        )
         return search_response.results
     except Exception as err:
-        st.error(f"Failed in metaphor.search_and_contents: {err}")
+        st.error(f"Failed in exa.search_and_contents: {err}")
         return None
 
 

@@ -30,4 +30,5 @@ Alwrity is an AI-powered LinkedIn blog post generator designed to assist users i
 3. Set up environment variables:
    - `SERPER_API_KEY`: Serper API key for Google search.
    - `GEMINI_API_KEY`: Google Generative AI API key.
+   - `EXA_API_KEY`: Exa API key for Metaphor search.
 4. Run the Alwrity script using `streamlit run alwrity.py`.
